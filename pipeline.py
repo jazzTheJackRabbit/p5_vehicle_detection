@@ -27,9 +27,10 @@ class VehicleDetectionPipeline:
 
         self.classifier = None
 
-    def extract_features_for_images(self, images, cspace='RGB', spatial_size=(32, 32),
+    def extract_features_for_images(self, images, color_space='RGB', spatial_size=(32, 32),
         hist_bins=32, hist_range=(0, 256)):
         # Create a list to append feature vectors to
+        print(self.extract_features_for_images.__name__)
         feature_vectors = []
 
         for image in images:
@@ -49,6 +50,7 @@ class VehicleDetectionPipeline:
         return feature_vectors
 
     def scale_feature_vectors(self, car_features, notcar_features):
+        print(self.scale_feature_vectors.__name__)
         scaled_X = None
 
         if len(car_features) > 0:
@@ -60,13 +62,13 @@ class VehicleDetectionPipeline:
 
             # Apply the scaler to X
             scaled_X = X_scaler.transform(X)
-            car_ind = np.random.randint(0, len(cars))
 
             self.scaler = X_scaler
 
         return scaled_X
 
     def extract_image_paths(self, path=None):
+        print(self.extract_image_paths.__name__)
         cars = []
         notcars = []
 
@@ -81,13 +83,14 @@ class VehicleDetectionPipeline:
 
         return cars, notcars
 
-    def preprocess_data(self):
-        cars, notcars = self.extract_image_paths(path='../data/vehicle_detection/*/*1/*.jpeg')
+    def preprocess_data(self, path):
+        print(self.preprocess_data.__name__)
+        cars, notcars = self.extract_image_paths(path=path)
                 
-        car_features = self.extract_features_for_images(cars, cspace='RGB', spatial_size=(32, 32),
+        car_features = self.extract_features_for_images(cars, color_space='RGB', spatial_size=(32, 32),
                                 hist_bins=32, hist_range=(0, 256))
         
-        notcar_features = self.extract_features_for_images(notcars, cspace='RGB', spatial_size=(32, 32),
+        notcar_features = self.extract_features_for_images(notcars, color_space='RGB', spatial_size=(32, 32),
                                 hist_bins=32, hist_range=(0, 256))
 
         self.X = self.scale_feature_vectors(car_features, notcar_features)
@@ -103,12 +106,13 @@ class VehicleDetectionPipeline:
         )
 
     def train(self):
+        print(self.train.__name__)
         # Use a linear SVC (support vector classifier)
         self.classifier = LinearSVC()
 
         # Train the SVC
         self.classifier.fit(self.X_train, self.y_train)
-        print('Test Accuracy of SVC = ', svc.score(self.X_test, self.y_test))
+        print('Test Accuracy of SVC = ', self.classifier.score(self.X_test, self.y_test))
 
     def find_vehicles(self, video_path):
         pass
@@ -140,9 +144,9 @@ class ImageProcessor:
             orient=orient, 
             pix_per_cell=pix_per_cell, 
             cell_per_block=cell_per_block,
-            channels=hog_channel
+            hog_channel=hog_channel
         )
-        self.feature_vector = np.concatenate((spatially_binned, hist_features, hog_features))
+        self.feature_vector = np.concatenate((spatial_bin_features, hist_features, hog_features))
         return self.feature_vector
 
     def extract_color_histogram_features(self, bins=32, range=(0,256)):
@@ -220,8 +224,9 @@ class ImageProcessor:
         # Return the image copy with boxes drawn
         return imcopy
 
-    def slide_window(img, x_start_stop=(None, None), y_start_stop=(None, None), 
+    def slide_window(self, x_start_stop=(None, None), y_start_stop=(None, None), 
         xy_window=(64, 64), xy_overlap=(0.5, 0.5)):
+        img = self.image
         # If x and/or y start/stop positions not defined, set to image size
         # Compute the span of the region to be searched    
         # Compute the number of pixels per step in x/y
@@ -244,17 +249,5 @@ class ImageProcessor:
                         (i-xy_window[0], j-xy_window[1]), (i, j)
                     )
                 )
+
         return window_list
-
-
-
-
-
-
-
-
-
-
-
-
-
