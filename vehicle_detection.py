@@ -38,7 +38,7 @@ class VehicleDetectionPipeline:
         print(self.extract_features_for_images.__name__)
         feature_vectors = []
 
-        for image in images:
+        for i,image in enumerate(images):
             # Read in each one by one
             image_processor = ImageProcessor(image)
             image_processor.extract_features(
@@ -52,6 +52,8 @@ class VehicleDetectionPipeline:
                 hog_channel=hog_channel
             )
             feature_vectors.append(image_processor.feature_vector)
+            if (i%100 == 0):
+                print("{}/{}".format(str(i),str(len(images))))
             
         self.feature_vectors = feature_vectors
 
@@ -84,12 +86,13 @@ class VehicleDetectionPipeline:
         if path is not None:
             images = glob.glob(path)
 
+            # import pdb; pdb.set_trace();
             for image in images:
-                if 'image' in image or 'extra' in image:
+                if 'non-vehicles' in image:
                     notcars.append(image)
                 else:
                     cars.append(image)
-
+        print(len(cars),len(notcars))
         return cars, notcars
 
     def preprocess_data(self, path):
@@ -100,13 +103,13 @@ class VehicleDetectionPipeline:
         car_features = self.extract_features_for_images(cars, 
             color_space='RGB', spatial_size=(32, 32),
             hist_bins=32, hist_range=(0, 256),
-            hog_channel="ALL"
+            hog_channel="GRAY"
         )
         
         notcar_features = self.extract_features_for_images(notcars, 
             color_space='RGB', spatial_size=(32, 32),
             hist_bins=32, hist_range=(0, 256),
-            hog_channel="ALL"
+            hog_channel="GRAY"
         )
 
         self.X = self.scale_feature_vectors(car_features, notcar_features)

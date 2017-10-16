@@ -93,6 +93,17 @@ class ImageProcessor:
 
         if hog_channel=="GRAY":
             img = self.convert_to_color_space(color_space="GRAY")
+            channel_features, hog_image = hog(
+                    img, 
+                    orientations=orient,
+                    pixels_per_cell=(pix_per_cell, pix_per_cell),
+                    cells_per_block=(cell_per_block, cell_per_block),
+                    block_norm='L2',
+                    visualise=True,
+                    feature_vector=feature_vector
+                )
+
+            hog_features = channel_features
 
         elif hog_channel=="ALL":         
             for channel in range(img.shape[2]):
@@ -166,22 +177,6 @@ class ImageProcessor:
         })
 
         return window_list
-
-    def find_vehicles(self, classifier, scaler):
-        image = self.image 
-        for window_scale_size in self.window_scale_sizes:
-            windows = self.slide_window(
-                x_start_stop=(0, image.shape[1]), 
-                y_start_stop=(int(image.shape[0]*self.window_y_cutoff), image.shape[0]), 
-                xy_window=(window_scale_size, window_scale_size), 
-                xy_overlap=(1, 1)
-            )
-            
-            car_windows = self.search_windows(clf=classifier, scaler=scaler, hog_channel="ALL")
-            self.result_image = self.draw_boxes(car_windows, color=(0, 0, 255), thick=6)
-
-        plt.imshow(self.result_image)
-        plt.show()
 
     def find_cars(self, 
         ystart=None, ystop=None, 
@@ -274,6 +269,21 @@ class ImageProcessor:
 
         return out_img
 
+    def find_vehicles(self, classifier, scaler):
+        image = self.image 
+        for window_scale_size in self.window_scale_sizes:
+            windows = self.slide_window(
+                x_start_stop=(0, image.shape[1]), 
+                y_start_stop=(int(image.shape[0]*self.window_y_cutoff), image.shape[0]), 
+                xy_window=(window_scale_size, window_scale_size), 
+                xy_overlap=(0.5, 0.5)
+            )
+            
+            car_windows = self.search_windows(clf=classifier, scaler=scaler, hog_channel="GRAY")
+            self.result_image = self.draw_boxes(car_windows, color=(0, 0, 255), thick=6)
+
+        plt.imshow(self.result_image)
+        plt.show()
 
     def search_windows(self, 
             clf=None, scaler=None, 
