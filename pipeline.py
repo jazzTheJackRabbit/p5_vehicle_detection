@@ -22,13 +22,13 @@ class ImageProcessor:
         self.result_image = np.copy(self.image)
         self.feature_vector = None
         
-        self.window_scale_sizes = [256, 192, 128, 64, 32]
+        self.window_scale_sizes = [256, 192, 128, 64]
         self.window_y_cutoff = 0.6
 
         self.window_objs = []
         self.car_windows = []
 
-        self.heat = np.zeros_like(self.image[:,:,0]).astype(np.float)
+        self.heat = None
 
     def convert_to_color_space(self, color_space="RGB"):
         img = np.copy(self.image)
@@ -58,6 +58,7 @@ class ImageProcessor:
     def extract_color_histogram_features(self, 
         bins=32, range=(0,256)):
         # Compute the histogram of the RGB channels separately
+
         rhist = np.histogram(self.image[:,:,0], bins=bins, range=range)
         ghist = np.histogram(self.image[:,:,1], bins=bins, range=range)
         bhist = np.histogram(self.image[:,:,2], bins=bins, range=range)
@@ -162,14 +163,16 @@ class ImageProcessor:
         y_search_subset = (y_start_stop[1] - y_start_stop[0])    
         y_start = y_stop - (int(y_search_subset/xy_window[1]) * xy_window[0])
         
+
         window_list = []
         for j in range(y_stop, y_start, -1*int(xy_window[1]*xy_overlap[1])):
             for i in range(x_stop, x_start, -1*int(xy_window[0]*xy_overlap[0])):
-                window_list.append(
-                    (
-                        (i-xy_window[0], j-xy_window[1]), (i, j)
+                if (i-xy_window[0]) >= 0 and (j-xy_window[1]) >= 0:
+                    window_list.append(
+                        (
+                            (i-xy_window[0], j-xy_window[1]), (i, j)
+                        )
                     )
-                )
 
         self.window_objs.append({
             'window_list': window_list,
@@ -271,19 +274,26 @@ class ImageProcessor:
 
     def find_vehicles(self, classifier, scaler):
         image = self.image 
+        car_windows = []
         for window_scale_size in self.window_scale_sizes:
+            print("Window size: {}".format(window_scale_size))
             windows = self.slide_window(
                 x_start_stop=(0, image.shape[1]), 
                 y_start_stop=(int(image.shape[0]*self.window_y_cutoff), image.shape[0]), 
                 xy_window=(window_scale_size, window_scale_size), 
                 xy_overlap=(0.5, 0.5)
             )
-            
-            car_windows = self.search_windows(clf=classifier, scaler=scaler, hog_channel="GRAY")
-            self.result_image = self.draw_boxes(car_windows, color=(0, 0, 255), thick=6)
 
+            # self.result_image = self.draw_boxes(windows, color=(0, 0, 255), thick=6)
+            # plt.imshow(self.result_image); plt.show();            
+            # self.result_image = np.copy(self.image)
+
+            car_windows.extend(self.search_windows(clf=classifier, scaler=scaler, hog_channel="GRAY"))
+
+        self.result_image = self.draw_boxes(car_windows, color=(0, 0, 255), thick=6)
         plt.imshow(self.result_image)
         plt.show()
+
 
     def search_windows(self, 
             clf=None, scaler=None, 
@@ -305,7 +315,14 @@ class ImageProcessor:
 
             #3) Extract the test window from original image
             for window in windows:
-                test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 64))      
+                # test_img = np.zeros((64,64,3))
+
+                try:
+                    subimg = img[window[0][1]:window[1][1], window[0][0]:window[1][0]]                
+                    test_img = cv2.resize(subimg,(64,64))
+                except:
+                    plt.imshow(subimg); plt.show()
+                    import pdb; pdb.set_trace()  # breakpoint 9ca7d05e //
                 #4) Extract features for that window using single_img_features()
 
                 test_ip = ImageProcessor(test_img)
@@ -338,6 +355,7 @@ class ImageProcessor:
 
     def add_heat(self):
         # Iterate through list of bboxes
+        self.heat = np.zeros((self.image.shape[0], self.image.shape[1])).astype(np.float)
         for box in self.car_windows:
             # Add += 1 for all pixels inside each bbox
             # Assuming each "box" takes the form ((x1, y1), (x2, y2))
