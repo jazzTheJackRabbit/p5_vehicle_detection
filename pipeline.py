@@ -126,6 +126,9 @@ class ImageProcessor:
             self.image = image
 
         self.feature_vector = None
+        
+        self.window_scale_sizes = [128]
+        self.window_y_cutoff = 0.6
 
     def convert_to_color_space(self, color_space="RGB"):
         img = np.copy(self.image)
@@ -249,5 +252,21 @@ class ImageProcessor:
                         (i-xy_window[0], j-xy_window[1]), (i, j)
                     )
                 )
-
+                
         return window_list
+
+    def find_vehicles(self):
+        image = self.image 
+        for window_scale_size in self.window_scale_sizes:
+            windows = self.slide_window(
+                x_start_stop=(0, image.shape[1]), 
+                y_start_stop=(int(image.shape[0]*self.window_y_cutoff), image.shape[0]), 
+                xy_window=(window_scale_size, window_scale_size), 
+                xy_overlap=(1, 1)
+            )
+            
+            # car_windows = search_windows(image, windows, svc, X_scaler)
+
+            window_img = self.draw_boxes(windows, color=(0, 0, 255), thick=6)                    
+            plt.imshow(window_img)
+            plt.show()
