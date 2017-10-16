@@ -127,8 +127,11 @@ class ImageProcessor:
 
         self.feature_vector = None
         
-        self.window_scale_sizes = [128]
+        self.window_scale_sizes = [256, 192, 128, 64, 32]
         self.window_y_cutoff = 0.6
+
+        self.window_objs = []
+        self.car_windows = []
 
     def convert_to_color_space(self, color_space="RGB"):
         img = np.copy(self.image)
@@ -137,9 +140,11 @@ class ImageProcessor:
             img = cv2.cvtColor(img, COLOR)
         return img
 
-    def extract_features(self, color_space='RGB', spatial_size=(32, 32),
-        hist_bins=32, hist_range=(0, 256), orient=9, pix_per_cell=8, 
-        cell_per_block=2, hog_channel=0,):
+    def extract_features(self, 
+        color_space='RGB', 
+        spatial_size=(32, 32),
+        hist_bins=32, hist_range=(0, 256), 
+        orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0):
         # Extract features
         spatial_bin_features = self.extract_bin_spatial(size=spatial_size)
         hist_features = self.extract_color_histogram_features(bins=hist_bins, range=hist_range)
@@ -179,7 +184,7 @@ class ImageProcessor:
         return spatial_features
 
     def extract_hog_features(self, orient=9, pix_per_cell=8, 
-        cell_per_block=2, hog_channel="GRAY"):
+        cell_per_block=2, hog_channel=0):
 
         img = np.copy(self.image)
         hog_features = []
@@ -252,10 +257,15 @@ class ImageProcessor:
                         (i-xy_window[0], j-xy_window[1]), (i, j)
                     )
                 )
-                
+
+        self.window_objs.append({
+            'window_list': window_list,
+            'window_scale_size': xy_window
+        })
+
         return window_list
 
-    def find_vehicles(self):
+    def find_vehicles(self, classifier, scaler):
         image = self.image 
         for window_scale_size in self.window_scale_sizes:
             windows = self.slide_window(
@@ -265,8 +275,59 @@ class ImageProcessor:
                 xy_overlap=(1, 1)
             )
             
-            # car_windows = search_windows(image, windows, svc, X_scaler)
+            car_windows = self.search_windows(clf=classifier, scaler=scaler)
 
-            window_img = self.draw_boxes(windows, color=(0, 0, 255), thick=6)                    
+            window_img = self.draw_boxes(car_windows, color=(0, 0, 255), thick=6)                    
             plt.imshow(window_img)
             plt.show()
+
+    def search_windows(self, 
+            clf=None, scaler=None, 
+            color_space='RGB', 
+            spatial_size=(32, 32), 
+            hist_bins=32, hist_range=(0, 256), 
+            orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0
+        ):
+
+        img = self.image
+
+        #1) Create an empty list to receive positive detection windows
+        on_windows = []
+
+        #2) Iterate over all windows in the list
+        for window_dict in self.window_objs:
+            windows = window_dict['window_list']
+            window_scale_size = window_dict['window_scale_size']
+
+            #3) Extract the test window from original image
+            for window in windows:
+                test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 64))      
+                #4) Extract features for that window using single_img_features()
+
+                test_ip = ImageProcessor(test_img)
+
+                # import pdb; pdb.set_trace();
+                features = test_ip.extract_features(
+                    color_space=color_space, 
+                    spatial_size=spatial_size, 
+                    hist_bins=hist_bins, 
+                    hist_range=hist_range,
+                    orient=orient, 
+                    pix_per_cell=pix_per_cell, 
+                    cell_per_block=cell_per_block, 
+                    hog_channel=hog_channel
+                )
+
+                #5) Scale extracted features to be fed to classifier
+                test_features = scaler.transform(np.array(features).reshape(1, -1))
+
+                #6) Predict using your classifier
+                prediction = clf.predict(test_features)
+
+                #7) If positive (prediction == 1) then save the window
+                if prediction == 1:
+                    on_windows.append(window)
+
+        #8) Return windows for positive detections
+        self.car_windows = on_windows
+        return on_windows
