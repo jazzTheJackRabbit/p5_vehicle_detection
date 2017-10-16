@@ -42,7 +42,6 @@ class ImageProcessor:
         spatial_size=(32, 32),
         hist_bins=32, hist_range=(0, 256), 
         orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0):
-
         # Extract features
         spatial_bin_features = self.extract_bin_spatial(size=spatial_size)
         hist_features = self.extract_color_histogram_features(bins=hist_bins, range=hist_range)
@@ -84,7 +83,7 @@ class ImageProcessor:
         return spatial_features
 
     def extract_hog_features(self, img=None,
-        orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0, feature_vector=True):
+        orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0):
 
         if img is None:
             img = np.copy(self.image)
@@ -95,7 +94,7 @@ class ImageProcessor:
             img = self.convert_to_color_space(color_space="GRAY")
 
         elif hog_channel=="ALL":         
-            for channel in range(img.shape[2]):
+            for channel in range(feature_image.shape[2]):
                 channel_features, hog_image = hog(
                     img[:,:,channel], 
                     orientations=orient,
@@ -103,7 +102,7 @@ class ImageProcessor:
                     cells_per_block=(cell_per_block, cell_per_block),
                     block_norm='L2',
                     visualise=True,
-                    feature_vector=feature_vector
+                    feature_vector=True
                 )
 
                 hog_features.extend(channel_features)
@@ -115,7 +114,7 @@ class ImageProcessor:
                     cells_per_block=(cell_per_block, cell_per_block),
                     block_norm='L2',
                     visualise=True,
-                    feature_vector=feature_vector
+                    feature_vector=True
                 )
 
             hog_features = channel_features
@@ -177,26 +176,23 @@ class ImageProcessor:
                 xy_overlap=(1, 1)
             )
             
-            car_windows = self.search_windows(clf=classifier, scaler=scaler, hog_channel="ALL")
+            car_windows = self.search_windows(clf=classifier, scaler=scaler)
             self.result_image = self.draw_boxes(car_windows, color=(0, 0, 255), thick=6)
 
         plt.imshow(self.result_image)
         plt.show()
 
     def find_cars(self, 
-        ystart=None, ystop=None, 
-        scale=None, 
-        classifier=None, scaler=None, 
-        color_space='RGB', 
-        spatial_size=(32, 32),
-        hist_bins=32, hist_range=(0, 256), 
-        orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0):
+        ystart, ystop, 
+        scale, 
+        classifier, scaler, 
+        orient, pix_per_cell, cell_per_block, spatial_size, hist_bins):
 
         draw_img = np.copy(self.image)
-        img = self.image.astype(np.float32)/255
+        img = img.astype(np.float32)/255
         
         img_tosearch = img[ystart:ystop,:,:]
-        ctrans_tosearch = cv2.cvtColor(img_tosearch,cv2.COLOR_RGB2YCrCb)
+        ctrans_tosearch = convert_color(img_tosearch, conv='RGB2YCrCb')
         if scale != 1:
             imshape = ctrans_tosearch.shape
             ctrans_tosearch = cv2.resize(ctrans_tosearch, (np.int(imshape[1]/scale), np.int(imshape[0]/scale)))
@@ -218,9 +214,9 @@ class ImageProcessor:
         nysteps = (nyblocks - nblocks_per_window) // cells_per_step
         
         # Compute individual channel HOG features for the entire image
-        hog1 = self.extract_hog_features(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=0, feature_vector=False)
-        hog2 = self.extract_hog_features(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=1, feature_vector=False)
-        hog3 = self.extract_hog_features(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=2, feature_vector=False)
+        hog1 = self.extract_hog_features(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=0)
+        hog2 = self.extract_hog_features(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=1)
+        hog3 = self.extract_hog_features(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=2)
         
         for xb in range(nxsteps):
             for yb in range(nysteps):
@@ -241,8 +237,8 @@ class ImageProcessor:
                 subimg_processor = ImageProcessor(subimg)
 
                 # Get color features
-                spatial_features = subimg_processor.extract_bin_spatial(size=spatial_size)
-                hist_features = subimg_processor.extract_color_histogram_features(bins=hist_bins, range=hist_range)
+                spatial_features = subimg_processor.bin_spatial(size=spatial_size)
+                hist_features = subimg_processor.color_hist(nbins=hist_bins)
 
                 # Scale features and make a prediction
                 test_features = scaler.transform(np.hstack((spatial_features, hist_features, hog_features)).reshape(1, -1))    
@@ -254,25 +250,19 @@ class ImageProcessor:
                     ytop_draw = np.int(ytop*scale)
                     win_draw = np.int(window*scale)
                     cv2.rectangle(draw_img,(xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart),(0,0,255),6) 
-        
-        self.result_image = draw_img                    
+                    
         return draw_img
 
     def run_find_cars(self, classifier, scaler):
+        ystart = 400
+        ystop = 656
 
-        scales = [0.25]
 
-        for scale in scales:
-            out_img = self.find_cars(
-                ystart=400, ystop=656, 
-                scale=scale, 
-                classifier=classifier, scaler=scaler
-            )
+        scales = [1, 1.5, 2]
+            
+        out_img = find_cars(img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins)
 
         plt.imshow(out_img)
-        plt.show()
-
-        return out_img
 
 
     def search_windows(self, 
@@ -282,8 +272,8 @@ class ImageProcessor:
             hist_bins=32, hist_range=(0, 256), 
             orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0
         ):
+
         img = self.image
-        # import pdb; pdb.set_trace();
 
         #1) Create an empty list to receive positive detection windows
         on_windows = []
