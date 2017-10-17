@@ -11,6 +11,7 @@ from skimage.feature import hog
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
+import pdb
 
 class ImageProcessor:
     def __init__(self, image):
@@ -46,13 +47,18 @@ class ImageProcessor:
         # Extract features
         spatial_bin_features = self.extract_bin_spatial(size=spatial_size)
         hist_features = self.extract_color_histogram_features(bins=hist_bins, range=hist_range)
-        hog_features = self.extract_hog_features(
-            orient=orient, 
-            pix_per_cell=pix_per_cell, 
-            cell_per_block=cell_per_block,
-            hog_channel=hog_channel
-        )
-        self.feature_vector = np.concatenate((spatial_bin_features, hist_features, hog_features))
+
+        if hog_channel is not None:
+            hog_features = self.extract_hog_features(
+                orient=orient, 
+                pix_per_cell=pix_per_cell, 
+                cell_per_block=cell_per_block,
+                hog_channel=hog_channel
+            )
+            self.feature_vector = np.concatenate((spatial_bin_features, hist_features, hog_features))
+        else:
+            self.feature_vector = np.concatenate((spatial_bin_features, hist_features))
+
         return self.feature_vector
 
     def extract_color_histogram_features(self, 
@@ -133,6 +139,25 @@ class ImageProcessor:
             hog_features = channel_features
 
         return hog_features
+
+    def extract_hog_features_for_scoring(self, img=None,
+        orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0, feature_vector=False):
+
+        if img is None:
+            img = np.copy(self.image)
+
+        hog_features = hog(
+            img[:,:,hog_channel], 
+            orientations=orient,
+            pixels_per_cell=(pix_per_cell, pix_per_cell),
+            cells_per_block=(cell_per_block, cell_per_block),
+            block_norm='L2',
+            visualise=False,
+            feature_vector=False
+        )
+
+        return hog_features
+
 
     def draw_boxes(self, bboxes, color=(0, 0, 255), thick=6):
         # Make a copy of the image
@@ -257,7 +282,6 @@ class ImageProcessor:
         return draw_img
 
     def run_find_cars(self, classifier, scaler):
-
         scales = [0.25]
 
         for scale in scales:
@@ -288,7 +312,7 @@ class ImageProcessor:
             # plt.imshow(self.result_image); plt.show();            
             # self.result_image = np.copy(self.image)
 
-            car_windows.extend(self.search_windows(clf=classifier, scaler=scaler, hog_channel="GRAY"))
+            car_windows.extend(self.search_windows(clf=classifier, scaler=scaler, hog_channel="ALL"))
 
         self.result_image = self.draw_boxes(car_windows, color=(0, 0, 255), thick=6)
         plt.imshow(self.result_image)
@@ -300,13 +324,24 @@ class ImageProcessor:
             color_space='RGB', 
             spatial_size=(32, 32), 
             hist_bins=32, hist_range=(0, 256), 
-            orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0
+            orient=9, pix_per_cell=8, cell_per_block=2, hog_channel="ALL"
         ):
         img = self.image
         # import pdb; pdb.set_trace();
 
         #1) Create an empty list to receive positive detection windows
         on_windows = []
+
+        import pdb; pdb.set_trace();
+        hog_features_0 = self.extract_hog_features_for_scoring(
+            orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0
+        )
+        hog_features_1 = self.extract_hog_features_for_scoring(
+            orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=1
+        )
+        hog_features_2 = self.extract_hog_features_for_scoring(
+            orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=2
+        )
 
         #2) Iterate over all windows in the list
         for window_dict in self.window_objs:
@@ -318,7 +353,17 @@ class ImageProcessor:
                 # test_img = np.zeros((64,64,3))
 
                 try:
-                    subimg = img[window[0][1]:window[1][1], window[0][0]:window[1][0]]                
+                    subimg = img[window[0][1]:window[1][1], window[0][0]:window[1][0]]
+                    import pdb; pdb.set_trace();
+                    subimg_hog_layer_0 = hog_features_0[window[0][1]:window[1][1], window[0][0]:window[1][0]].ravel()
+                    subimg_hog_layer_1 = hog_features_1[window[0][1]:window[1][1], window[0][0]:window[1][0]].ravel()
+                    subimg_hog_layer_2 = hog_features_2[window[0][1]:window[1][1], window[0][0]:window[1][0]].ravel()
+                    subimg_hog_features = np.hstack((
+                        subimg_hog_layer_0, 
+                        subimg_hog_layer_1, 
+                        subimg_hog_layer_2, 
+                    ))
+
                     test_img = cv2.resize(subimg,(64,64))
                 except:
                     plt.imshow(subimg); plt.show()
@@ -336,8 +381,10 @@ class ImageProcessor:
                     orient=orient, 
                     pix_per_cell=pix_per_cell, 
                     cell_per_block=cell_per_block, 
-                    hog_channel=hog_channel
+                    hog_channel=None
                 )
+
+                features = np.concatenate((features, subimg_hog_features))
 
                 #5) Scale extracted features to be fed to classifier
                 test_features = scaler.transform(np.array(features).reshape(1, -1))
