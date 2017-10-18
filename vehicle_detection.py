@@ -101,15 +101,15 @@ class VehicleDetectionPipeline:
         
         # Feature extraction for training        
         car_features = self.extract_features_for_images(cars, 
-            color_space='RGB', spatial_size=(32, 32),
+            color_space='YCrCb', spatial_size=(32, 32),
             hist_bins=32, hist_range=(0, 256),
-            hog_channel="GRAY"
+            hog_channel="ALL"
         )
         
         notcar_features = self.extract_features_for_images(notcars, 
-            color_space='RGB', spatial_size=(32, 32),
+            color_space='YCrCb', spatial_size=(32, 32),
             hist_bins=32, hist_range=(0, 256),
-            hog_channel="GRAY"
+            hog_channel="ALL"
         )
 
         self.X = self.scale_feature_vectors(car_features, notcar_features)

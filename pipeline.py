@@ -23,7 +23,7 @@ class ImageProcessor:
         self.result_image = np.copy(self.image)
         self.feature_vector = None
         
-        self.window_scale_sizes = [256, 192, 128, 64]
+        self.window_scale_sizes = [256, 192, 128]
         self.window_y_cutoff = 0.6
 
         self.window_objs = []
@@ -45,6 +45,8 @@ class ImageProcessor:
         orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0):
 
         # Extract features
+        self.image = self.convert_to_color_space(color_space=color_space)
+
         spatial_bin_features = self.extract_bin_spatial(size=spatial_size)
         hist_features = self.extract_color_histogram_features(bins=hist_bins, range=hist_range)
 
@@ -57,7 +59,7 @@ class ImageProcessor:
             )
             self.feature_vector = np.concatenate((spatial_bin_features, hist_features, hog_features))
         else:
-            self.feature_vector = np.concatenate((spatial_bin_features, hist_features))
+            self.feature_vector = np.concatenate((spatial_bin_features, hist_features))        
 
         return self.feature_vector
 
@@ -215,11 +217,12 @@ class ImageProcessor:
         hist_bins=32, hist_range=(0, 256), 
         orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0):
 
-        draw_img = np.copy(self.image)
+        draw_img = np.copy(self.result_image)
         img = self.image.astype(np.float32)/255
         
         img_tosearch = img[ystart:ystop,:,:]
         ctrans_tosearch = cv2.cvtColor(img_tosearch,cv2.COLOR_RGB2YCrCb)
+        # ctrans_tosearch = img_tosearch
         if scale != 1:
             imshape = ctrans_tosearch.shape
             ctrans_tosearch = cv2.resize(ctrans_tosearch, (np.int(imshape[1]/scale), np.int(imshape[0]/scale)))
@@ -237,13 +240,14 @@ class ImageProcessor:
         window = 64
         nblocks_per_window = (window // pix_per_cell) - cell_per_block + 1
         cells_per_step = 2  # Instead of overlap, define how many cells to step
+
         nxsteps = (nxblocks - nblocks_per_window) // cells_per_step
         nysteps = (nyblocks - nblocks_per_window) // cells_per_step
         
         # Compute individual channel HOG features for the entire image
-        hog1 = self.extract_hog_features(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=0, feature_vector=False)
-        hog2 = self.extract_hog_features(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=1, feature_vector=False)
-        hog3 = self.extract_hog_features(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=2, feature_vector=False)
+        hog1 = self.extract_hog_features_for_scoring(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=0, feature_vector=False)
+        hog2 = self.extract_hog_features_for_scoring(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=1, feature_vector=False)
+        hog3 = self.extract_hog_features_for_scoring(img=ctrans_tosearch, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=2, feature_vector=False)
         
         for xb in range(nxsteps):
             for yb in range(nysteps):
@@ -273,28 +277,65 @@ class ImageProcessor:
                 test_prediction = classifier.predict(test_features)
                 
                 if test_prediction == 1:
+                    # plt.imshow(subimg)
+                    # plt.show()
                     xbox_left = np.int(xleft*scale)
                     ytop_draw = np.int(ytop*scale)
                     win_draw = np.int(window*scale)
+                    self.car_windows.append(((xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart)))
                     cv2.rectangle(draw_img,(xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart),(0,0,255),6) 
-        
+
         self.result_image = draw_img                    
         return draw_img
 
     def run_find_cars(self, classifier, scaler):
-        scales = [0.25]
+        scales = [0.75,1.5]
+
+        window_size = 64
+        y_top = 400#int(self.image.shape[0] * 0.6)
+        y_bottom = 656#self.image.shape[0]
 
         for scale in scales:
             out_img = self.find_cars(
-                ystart=400, ystop=656, 
+                ystart=y_top,
+                ystop=y_bottom, 
                 scale=scale, 
                 classifier=classifier, scaler=scaler
             )
 
-        plt.imshow(out_img)
-        plt.show()
+            self.result_image = out_img
 
-        return out_img
+        self.add_heat()
+        self.apply_threshold(2)
+
+        from scipy.ndimage.measurements import label
+        labels = label(self.heat)
+        # print(labels[1], 'cars found')
+
+        def draw_labeled_bboxes(img, labels):
+            # Iterate through all detected cars
+            for car_number in range(1, labels[1]+1):
+                # Find pixels with each car_number label value
+                nonzero = (labels[0] == car_number).nonzero()
+                # Identify x and y values of those pixels
+                nonzeroy = np.array(nonzero[0])
+                nonzerox = np.array(nonzero[1])
+                # Define a bounding box based on min/max x and y
+                bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
+
+                # Draw the box on the image
+                cv2.rectangle(img, bbox[0], bbox[1], (0,0,255), 6)
+
+            # Return the image
+            return img
+
+        # Draw bounding boxes on a copy of the image
+        self.result_image = draw_labeled_bboxes(np.copy(self.image), labels)
+
+        # plt.imshow(self.result_image)
+        # plt.show()
+
+
 
     def find_vehicles(self, classifier, scaler):
         image = self.image 
@@ -332,17 +373,6 @@ class ImageProcessor:
         #1) Create an empty list to receive positive detection windows
         on_windows = []
 
-        import pdb; pdb.set_trace();
-        hog_features_0 = self.extract_hog_features_for_scoring(
-            orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0
-        )
-        hog_features_1 = self.extract_hog_features_for_scoring(
-            orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=1
-        )
-        hog_features_2 = self.extract_hog_features_for_scoring(
-            orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=2
-        )
-
         #2) Iterate over all windows in the list
         for window_dict in self.window_objs:
             windows = window_dict['window_list']
@@ -354,15 +384,6 @@ class ImageProcessor:
 
                 try:
                     subimg = img[window[0][1]:window[1][1], window[0][0]:window[1][0]]
-                    import pdb; pdb.set_trace();
-                    subimg_hog_layer_0 = hog_features_0[window[0][1]:window[1][1], window[0][0]:window[1][0]].ravel()
-                    subimg_hog_layer_1 = hog_features_1[window[0][1]:window[1][1], window[0][0]:window[1][0]].ravel()
-                    subimg_hog_layer_2 = hog_features_2[window[0][1]:window[1][1], window[0][0]:window[1][0]].ravel()
-                    subimg_hog_features = np.hstack((
-                        subimg_hog_layer_0, 
-                        subimg_hog_layer_1, 
-                        subimg_hog_layer_2, 
-                    ))
 
                     test_img = cv2.resize(subimg,(64,64))
                 except:
@@ -381,10 +402,8 @@ class ImageProcessor:
                     orient=orient, 
                     pix_per_cell=pix_per_cell, 
                     cell_per_block=cell_per_block, 
-                    hog_channel=None
+                    hog_channel=hog_channel
                 )
-
-                features = np.concatenate((features, subimg_hog_features))
 
                 #5) Scale extracted features to be fed to classifier
                 test_features = scaler.transform(np.array(features).reshape(1, -1))
@@ -407,6 +426,11 @@ class ImageProcessor:
             # Add += 1 for all pixels inside each bbox
             # Assuming each "box" takes the form ((x1, y1), (x2, y2))
             self.heat[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
+
+        for box in self.car_windows:
+            # Add += 1 for all pixels inside each bbox
+            # Assuming each "box" takes the form ((x1, y1), (x2, y2))
+            self.heat[box[0][1]:box[1][1], box[0][0]:box[1][0]] = np.max(self.heat[box[0][1]:box[1][1], box[0][0]:box[1][0]])
         
     def apply_threshold(self, threshold):
         # Zero out pixels below the threshold
