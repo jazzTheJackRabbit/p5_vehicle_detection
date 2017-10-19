@@ -25,9 +25,12 @@ class VehicleDetectionPipeline:
         self.y_test = None
 
         self.feature_vectors = []
-        self.scaler = None
 
+        self.scaler = None
         self.classifier = None
+
+        self.current_frame_processor = None
+        self.previous_frame_processor = None
 
     def extract_features_for_images(self, images, 
         color_space='RGB', 
@@ -133,5 +136,14 @@ class VehicleDetectionPipeline:
         self.classifier.fit(self.X_train, self.y_train)
         print('Test Accuracy of SVC = ', self.classifier.score(self.X_test, self.y_test))
 
-    def find_vehicles(self, video_path):
-        pass
+    def find_vehicles(self, image):
+        self.current_frame_processor = ImageProcessor(image)
+
+        if self.previous_frame_processor is None:            
+            self.current_frame_processor.run_find_cars(self.classifier, self.scaler)
+        else:
+            self.current_frame_processor.run_find_cars(self.classifier, self.scaler, previous_frame_processor=self.previous_frame_processor)
+
+        self.previous_frame_processor = self.current_frame_processor
+
+        return self.current_frame_processor.result_image
