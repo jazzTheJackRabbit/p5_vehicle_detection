@@ -95,19 +95,37 @@ I tried various combinations of parameters and...
 
 > Describe how (and identify where in your code) you trained a classifier using your selected HOG features (and color features if you used them).
 
-I experimented using a Linear Support Vector Machine Classifier to find a hyperplane of separation for the high-dimensional dataset created from the images. I chose the Linear Support Vector Machine Classifier because the problem presented a binary classification problem.
+I experimented using a Linear Support Vector Machine Classifier to find a hyperplane of separation for the high-dimensional dataset created from the images. I chose the Linear Support Vector Machine Classifier because the problem presented a binary classification problem. Since the feature vectors in this problem are high-dimensional, SVMs work well in high dimensional spaces.
+
+The following methods are responsible for performing the training phase with a Linear SVC:
+* `VehicleDetectionPipeline.train`
+
 
 ** Sliding Window Search **
 
 > Describe how (and identify where in your code) you implemented a sliding window search.  How did you decide what scales to search and how much to overlap windows?
 
-I decided to search random window positions at random scales all over the image and came up with this (ok just kidding I didn't actually ;):
+I tried two approaches for the sliding window technique.
+
+* I implemented a function `ImageProcessor.slide_window` to return the coordinates of square windows of a specific window size. These coordinates were then used to create sub-images (which were resized to size 64x64) and features (hog, color-histograms, spatial-bins) were extracted from these "patches" and run through the classifier. If the classifier classified the window as having a car, the window would be appended to the list of candidate detections. This was then repeated for different window scale sizes ([256px, 192px, 128px, 64px]).
+
+* Extracting the HOG features for every sub-image/image patch was very slow. As a result, a second approach was to find the HOG on the entire image and then select the corresponding elements in the HOG matrix for the specific image patch and append it with the other features extracted from the resized (64x64) image patch and run it through the classifier.
 
 ![alt text][image3]
 
+** Result **
+
 > Show some examples of test images to demonstrate how your pipeline is working.  What did you do to optimize the performance of your classifier?
 
-Ultimately I searched on two scales using YCrCb 3-channel HOG features plus spatially binned color and histograms of color in the feature vector, which provided a nice result.  Here are some example images:
+For the final version of the pipeline, I used converted each frame of the image to the `YCrCb` color space and used extracted HOG features for all 3-channels. In addition, I extracted features for image patches based on spatial binning of color intensities and histograms of color.
+
+#TODO: How did i optimize performance?
+
+The final result of pipeline with bounding boxes drawn on the cars is as follows for a few different test images.
+
+#TODO: Final images
+
+#TODO: Images of pipeline
 
 ![alt text][image4]
 ---
@@ -117,29 +135,31 @@ Ultimately I searched on two scales using YCrCb 3-channel HOG features plus spat
 > Provide a link to your final video output.  Your pipeline should perform reasonably well on the entire project video (somewhat wobbly or unstable bounding boxes are ok as long as you are identifying the vehicles most of the time with minimal false positives.)
 Here's a [link to my video result](./project_video.mp4)
 
+#TODO: Link to video
 
 > Describe how (and identify where in your code) you implemented some kind of filter for false positives and some method for combining overlapping bounding boxes.
 
-I recorded the positions of positive detections in each frame of the video.  From the positive detections I created a heatmap and then thresholded that map to identify vehicle positions.  I then used `scipy.ndimage.measurements.label()` to identify individual blobs in the heatmap.  I then assumed each blob corresponded to a vehicle.  I constructed bounding boxes to cover the area of each blob detected.
+* I recorded the positions of positive detections in each frame of the video.  From the positive detections I created a heatmap and then thresholded that map to identify vehicle positions.  
 
-Here's an example result showing the heatmap from a series of frames of video, the result of `scipy.ndimage.measurements.label()` and the bounding boxes then overlaid on the last frame of video:
+* I then used `scipy.ndimage.measurements.label()` to identify individual blobs in the heatmap.  I then assumed each blob corresponded to a vehicle.  I constructed bounding boxes to cover the area of each blob detected.
 
-### Here are six frames and their corresponding heatmaps:
+Here's an example result showing the heatmap from a series of frames of video:
+#TODO: Non-maxxed threshold value.
 
-![alt text][image5]
+* A problem here was that some of the overlapping rectangles that represented an True Positive detection, would only have an intersection within another window in a small subregion of the window, so the regions below the threshold were often being dropped. As a fix for this problem, for every group of overlapping windows, I reset the values of the pixels in the heat map to the maximum of the heat map value within the set of overlapping windows. This created a better heat map representation for the thresholding as parts of the windows in the heat map that belonged to the same car were not dropped due to low threshold values.
 
-### Here is the output of `scipy.ndimage.measurements.label()` on the integrated heatmap from all six frames:
-![alt text][image6]
-
-### Here the resulting bounding boxes are drawn onto the last frame in the series:
-![alt text][image7]
+Here's an example result showing the heat map with the max values for overlapping rectangles from a series of frames of video:
+#TODO: Maxxed threshold value.
 
 
 
 ---
 
-###Discussion
+** Discussion **
 
-####1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
+> Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
 
-Here I'll talk about the approach I took, what techniques I used, what worked and why, where the pipeline might fail and how I might improve it if I were going to pursue this project further.
+This pipeline would likely fail in an environment where "real-time" detections are required, which is the case in self driving cars. For video of 50 seconds, the pipeline took 50 minutes (on my personal laptop) to run the classification and this would not work in a real world environment.
+
+An obvious solution is to use a more powerful server with a powerful GPU to increase the raw speed of computation.
+Additionally, it is possible to parallelize the feature extraction and classification process for the image patches for an image (since none of the patches depend on any of the other patches, and as a result, the features can be extracted and classified for each image patch independently of the others). This would result in a massive speed increase and make the object detection process as close to real time as possible.
