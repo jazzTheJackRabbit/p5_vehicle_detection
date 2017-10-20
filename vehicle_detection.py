@@ -1,18 +1,12 @@
-import cv2
 import glob
-import matplotlib.image as mpimg
 import numpy as np
-
-from matplotlib import pyplot as plt
-from os.path import abspath
-from os.path import join
-from os.path import realpath
-from skimage.feature import hog
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
+import pickle
+import pdb
 
-from pipeline import ImageProcessor
+from image_processor import ImageProcessor
 
 class VehicleDetectionPipeline:
     def __init__(self):
@@ -32,11 +26,23 @@ class VehicleDetectionPipeline:
         self.current_frame_processor = None
         self.previous_frame_processor = None
 
-    def extract_features_for_images(self, images, 
-        color_space='RGB', 
-        spatial_size=(32, 32),
-        hist_bins=32, hist_range=(0, 256), 
-        orient=9, pix_per_cell=8, cell_per_block=2, hog_channel=0):
+    def load(self, classifier="classifier-all-ycrcb.p", scaler="scaler-all-ycrcb.p"):
+        self.X_train = pickle.load(open('saved_features/X_train.p', 'rb'))
+        self.X_test= pickle.load(open('saved_features/X_test.p', 'rb'))
+        self.y_train = pickle.load(open('saved_features/y_train.p', 'rb'))
+        self.y_test = pickle.load(open('saved_features/y_test.p'), 'rb')
+
+        self.classifier = pickle.load(open("saved_models/{}".format(classifier), 'rb'))
+        self.scaler = pickle.load(open("saved_models/{}".format(scaler), 'rb'))
+
+    def extract_features_for_images(self, images, color_space='RGB', spatial_size=(32, 32),
+                                    hist_bins=32, hist_range=(0, 256), orient=9, pix_per_cell=8, cell_per_block=2,
+                                    hog_channel=0):
+        """
+        Extract features based on color-histograms, spatial-binning and histogram of oriented gradients
+        (HOG) and creates feature vectors for all the images in the dataset and creates the training data required
+        for training.
+        """
         # Create a list to append feature vectors to
         print(self.extract_features_for_images.__name__)
         feature_vectors = []
@@ -55,7 +61,7 @@ class VehicleDetectionPipeline:
                 hog_channel=hog_channel
             )
             feature_vectors.append(image_processor.feature_vector)
-            if (i%100 == 0):
+            if (i%1000 == 0):
                 print("{}/{}".format(str(i),str(len(images))))
             
         self.feature_vectors = feature_vectors
@@ -63,13 +69,17 @@ class VehicleDetectionPipeline:
         # Return list of feature vectors
         return feature_vectors
 
-    def scale_feature_vectors(self, car_features, notcar_features):
+    def scale_feature_vectors(self, car_features, not_car_features):
+        """
+        Scale/Normalize feature vector values for each feature so that none of the feature sets (color-histograms/
+        spatially-binned/HOG features) dominate each other.
+        """
         print(self.scale_feature_vectors.__name__)
         scaled_X = None
 
         if len(car_features) > 0:
             # y stack of feature vectors
-            X = np.vstack((car_features, notcar_features)).astype(np.float64)                        
+            X = np.vstack((car_features, not_car_features)).astype(np.float64)
 
             # Fit a per-column scaler
             X_scaler = StandardScaler().fit(X)
@@ -82,6 +92,9 @@ class VehicleDetectionPipeline:
         return scaled_X
 
     def extract_image_paths(self, path=None):
+        """
+        Helper method to extract image paths for training images.
+        """
         print(self.extract_image_paths.__name__)
         cars = []
         notcars = []
@@ -98,8 +111,12 @@ class VehicleDetectionPipeline:
         print(len(cars),len(notcars))
         return cars, notcars
 
-    def preprocess_data(self, path):
-        print(self.preprocess_data.__name__)
+    def pre_process_data(self, path):
+        """
+        Pre-process the images from the dataset to create feature vectors for each image and create training and
+        testing sets of features and labels.
+        """
+        print(self.pre_process_data.__name__)
         cars, notcars = self.extract_image_paths(path=path)
         
         # Feature extraction for training        
@@ -128,15 +145,23 @@ class VehicleDetectionPipeline:
         )
 
     def train(self):
+        """
+        Train a Linear Support Vector Classifier on the training dataset of feature vectors previously created.
+        """
         print(self.train.__name__)
         # Use a linear SVC (support vector classifier)
         self.classifier = LinearSVC()
 
         # Train the SVC
         self.classifier.fit(self.X_train, self.y_train)
+
+    def test_performance(self):
         print('Test Accuracy of SVC = ', self.classifier.score(self.X_test, self.y_test))
 
     def find_vehicles(self, image):
+        """
+        Perform vehicle detection for a given image, using the trained classifier.
+        """
         self.current_frame_processor = ImageProcessor(image)
 
         if self.previous_frame_processor is None:            
