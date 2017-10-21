@@ -42,6 +42,8 @@ class ImageProcessor:
         in the training phase.
         """
         # Extract features
+        print('asd')
+        # import pdb; pdb.set_trace();
         self.image = self.convert_to_color_space(color_space=color_space)
 
         spatial_bin_features = self.extract_bin_spatial(size=spatial_size)
@@ -155,17 +157,16 @@ class ImageProcessor:
         if img is None:
             img = np.copy(self.image)
 
-        hog_features = hog(
+        hog_features, res_image = hog(
             img[:,:,hog_channel], 
             orientations=orient,
             pixels_per_cell=(pix_per_cell, pix_per_cell),
             cells_per_block=(cell_per_block, cell_per_block),
             block_norm='L2',
-            visualise=False,
+            visualise=True,
             feature_vector=feature_vector
         )
-
-        return hog_features
+        return hog_features, res_image
 
     def find_cars(self,
                   ystart=None, ystop=None,
@@ -220,9 +221,10 @@ class ImageProcessor:
                 ypos = yb*cells_per_step
                 xpos = xb*cells_per_step
                 # Extract HOG for this patch
-                hog_feat1 = hog1[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel() 
-                hog_feat2 = hog2[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel() 
-                hog_feat3 = hog3[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel() 
+                hog_feat1 = hog1[0][ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel()
+                hog_feat2 = hog2[0][ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel()
+                hog_feat3 = hog3[0][ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel()
+
                 hog_features = np.hstack((hog_feat1, hog_feat2, hog_feat3))
 
                 xleft = xpos*pix_per_cell
@@ -230,7 +232,6 @@ class ImageProcessor:
 
                 # Extract the image patch
                 subimg = cv2.resize(ctrans_tosearch[ytop:ytop+window, xleft:xleft+window], (64,64))
-                
                 subimg_processor = ImageProcessor(subimg)
 
                 # Get color features
@@ -245,6 +246,7 @@ class ImageProcessor:
                 if test_prediction == 1:
                     # plt.imshow(subimg)
                     # plt.show()
+                    # pdb.set_trace();
                     xbox_left = np.int(xleft*scale)
                     ytop_draw = np.int(ytop*scale)
                     win_draw = np.int(window*scale)
@@ -258,7 +260,7 @@ class ImageProcessor:
         """
         Bootstrap method to run the vehicle detection pipeline for the new image.
         """
-        scales = [0.75,1.5,2,3,4]
+        scales = [0.75, 1, 1.5, 2, 3]
 
         window_size = 64
         y_top = 400#int(self.image.shape[0] * 0.6)
@@ -330,11 +332,12 @@ class ImageProcessor:
             # Add += 1 for all pixels inside each bbox
             # Assuming each "box" takes the form ((x1, y1), (x2, y2))
             self.heat[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
-
+        pdb.set_trace();
         for box in self.car_windows:
             # Add += 1 for all pixels inside each bbox
             # Assuming each "box" takes the form ((x1, y1), (x2, y2))
             self.heat[box[0][1]:box[1][1], box[0][0]:box[1][0]] = np.max(self.heat[box[0][1]:box[1][1], box[0][0]:box[1][0]])
+        pdb.set_trace();
         
     def apply_threshold(self, threshold):
         """

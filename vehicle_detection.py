@@ -30,7 +30,7 @@ class VehicleDetectionPipeline:
         self.X_train = pickle.load(open('saved_features/X_train.p', 'rb'))
         self.X_test= pickle.load(open('saved_features/X_test.p', 'rb'))
         self.y_train = pickle.load(open('saved_features/y_train.p', 'rb'))
-        self.y_test = pickle.load(open('saved_features/y_test.p'), 'rb')
+        self.y_test = pickle.load(open('saved_features/y_test.p', 'rb'))
 
         self.classifier = pickle.load(open("saved_models/{}".format(classifier), 'rb'))
         self.scaler = pickle.load(open("saved_models/{}".format(scaler), 'rb'))
