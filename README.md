@@ -220,6 +220,8 @@ The results of the pipeline with bounding boxes drawn on the cars is as follows 
 
 Here's a [link to my video result](https://www.youtube.com/watch?v=CKhCfjDUAoo)
 
+The link to the video in my project repository is at the relative path:
+* `./output_image/project_video.mp4`
 
 > Describe how (and identify where in your code) you implemented some kind of filter for false positives and some method for combining overlapping bounding boxes.
 
